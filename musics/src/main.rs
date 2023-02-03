@@ -1,7 +1,7 @@
 mod library;
 
 use crate::library::Library;
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8Path;
 use eframe::egui::{Context, ProgressBar, Sense, Ui, Widget};
 use eframe::{egui, App, Frame};
 use sound::Player;
@@ -22,7 +22,11 @@ struct MusicsApp {
 }
 
 impl MusicsApp {
-    fn new(_cc: &eframe::CreationContext<'_>) -> Self {
+    fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        // TODO (2023-02-03): There seems to be an issue, that when pixels_per_point is
+        //    set to 1.0 (the default), the ui is instead shown at 2x the scale it should be.
+        cc.egui_ctx.set_pixels_per_point(0.9999);
+
         let mut library = Library::new();
         library.insert_from_directory(Utf8Path::new("example_audio"));
 
@@ -42,6 +46,62 @@ impl MusicsApp {
         self.player
             .play_file(Utf8Path::new("example_audio/blank_holes_snippet.ogg"));
     }
+
+    fn show_play_controls(&mut self, ui: &mut Ui) {
+        ui.horizontal(|ui| {
+            let duration = self.player.song_duration();
+            let elapsed = self.player.time_elapsed();
+
+            time_elapsed_widget(ui, duration, elapsed);
+
+            let fraction = elapsed.as_secs_f32() / duration.as_secs_f32();
+
+            let bar_response = ProgressBar::new(fraction).ui(ui);
+            let response = bar_response.interact(Sense::click_and_drag());
+
+            if let Some(interact_pos) = response.interact_pointer_pos() {
+                if response.drag_released() || response.clicked() {
+                    let x_on_bar = interact_pos.x - response.rect.min.x;
+                    let bar_width = response.rect.width();
+                    let fraction = x_on_bar / bar_width;
+
+                    let seek_duration = (duration.as_secs_f32() * fraction).max(0.);
+                    self.player.seek(Duration::from_secs_f32(seek_duration));
+                }
+            }
+        });
+
+        ui.horizontal(|ui| {
+            if ui.button("|<<").clicked() {
+                self.play_previous_song();
+            }
+
+            if self.player.is_playing() {
+                if ui.button("||").clicked() {
+                    self.player.pause();
+                }
+            } else if ui.button(">").clicked() {
+                if self.player.empty() {
+                    self.play_next_song();
+                } else {
+                    self.player.resume();
+                }
+            }
+
+            if ui.button(">>|").clicked() {
+                self.play_next_song();
+            }
+
+            let mut volume = self.player.volume();
+            egui::Slider::new(&mut volume, 0.0..=1.0)
+                .fixed_decimals(1)
+                .ui(ui);
+
+            if volume != self.player.volume() {
+                self.player.set_volume(volume);
+            }
+        });
+    }
 }
 
 impl App for MusicsApp {
@@ -51,49 +111,7 @@ impl App for MusicsApp {
         }
 
         egui::TopBottomPanel::bottom("controls").show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                if ui.button("|<<").clicked() {
-                    self.play_previous_song();
-                }
-
-                if self.player.is_playing() {
-                    if ui.button("||").clicked() {
-                        self.player.pause();
-                    }
-                } else if ui.button(">").clicked() {
-                    if self.player.empty() {
-                        self.player
-                            .play_file(Utf8Path::new("example_audio/blank_holes_snippet.ogg"));
-                    } else {
-                        self.player.resume();
-                    }
-                }
-
-                if ui.button(">>|").clicked() {
-                    self.play_next_song();
-                }
-
-                let duration = self.player.song_duration();
-                let elapsed = self.player.time_elapsed();
-
-                time_elapsed_widget(ui, duration, elapsed);
-
-                let fraction = elapsed.as_secs_f32() / duration.as_secs_f32();
-
-                let bar_response = ProgressBar::new(fraction).ui(ui);
-                let response = bar_response.interact(Sense::click_and_drag());
-
-                if let Some(interact_pos) = response.interact_pointer_pos() {
-                    if response.drag_released() || response.clicked() {
-                        let x_on_bar = interact_pos.x - response.rect.min.x;
-                        let bar_width = response.rect.width();
-                        let fraction = x_on_bar / bar_width;
-
-                        let seek_duration = (duration.as_secs_f32() * fraction).max(0.);
-                        self.player.seek(Duration::from_secs_f32(seek_duration));
-                    }
-                }
-            });
+            self.show_play_controls(ui);
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {

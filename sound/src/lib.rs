@@ -7,6 +7,7 @@ use crate::decoder::{SymphoniaDecoder, TimeControl};
 use camino::Utf8Path;
 use rodio::{OutputStream, OutputStreamHandle, Sink};
 use std::fs::File;
+use std::io::sink;
 use std::time::Duration;
 use symphonia::core::io::MediaSourceStream;
 
@@ -56,19 +57,30 @@ impl Player {
         let decoder = SymphoniaDecoder::new(stream).expect("Creating decoder should work");
         self.time_control = decoder.get_control();
 
-        // For the current version of rodio, the only way to empty out a sink seems to be to
-        // create a new one.
         self.replace_sink();
 
         self.sink.append(decoder);
         self.sink.play();
     }
 
+    /// For the current version of rodio, the only way to empty out a sink seems to be to
+    /// create a new one.
     fn replace_sink(&mut self) {
+        let volume = self.sink.volume();
         self.sink = Sink::try_new(&self.stream_handle).expect("Could not create sink");
+        self.sink.set_volume(volume);
+
         // A sink starts unpaused by default, but for us an unpaused + empty sink means
         // the next song should be played automatically. Therefore we pause it.
         self.sink.pause();
+    }
+
+    pub fn volume(&self) -> f32 {
+        self.sink.volume()
+    }
+
+    pub fn set_volume(&self, volume: f32) {
+        self.sink.set_volume(volume);
     }
 
     /// Duration of the current song.
