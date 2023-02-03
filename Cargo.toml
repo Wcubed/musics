@@ -4,3 +4,4 @@ members = ["sound"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [workspace.dependencies]
+camino = "1.1.2"

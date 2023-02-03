@@ -20,8 +20,9 @@ use symphonia::{
     default::get_probe,
 };
 
+/// Thread-safe struct for time related control of [`SymphoniaDecoder`] objects.
 #[derive(Clone)]
-pub struct DecoderControl {
+pub struct TimeControl {
     total_duration: Duration,
     time_elapsed: Arc<RwLock<Duration>>,
 
@@ -30,10 +31,14 @@ pub struct DecoderControl {
     seek_request: Arc<RwLock<Option<Duration>>>,
 }
 
-impl DecoderControl {
-    pub fn seek(&self, elapsed: Duration) {
-        *self.seek_request.write().unwrap() = Some(elapsed);
-        *self.time_elapsed.write().unwrap() = elapsed;
+impl TimeControl {
+    /// Instructs the connected decoder to seek.
+    /// Seeks to the end if the given time is larger than the total duration.
+    pub fn seek(&self, time: Duration) {
+        let capped_time = self.total_duration.min(time);
+
+        *self.seek_request.write().unwrap() = Some(capped_time);
+        *self.time_elapsed.write().unwrap() = capped_time;
     }
 
     pub fn get_seek_request(&self) -> Option<Duration> {
@@ -68,7 +73,7 @@ pub struct SymphoniaDecoder {
     format: Box<dyn FormatReader>,
     buffer: SampleBuffer<i16>,
     spec: SignalSpec,
-    control: DecoderControl,
+    control: TimeControl,
 }
 
 impl SymphoniaDecoder {
@@ -91,7 +96,7 @@ impl SymphoniaDecoder {
 
     /// Hands out controllers, so that other threads can get info / control this decoder while
     /// it is playing.
-    pub fn get_control(&self) -> DecoderControl {
+    pub fn get_control(&self) -> TimeControl {
         self.control.clone()
     }
 
@@ -134,7 +139,7 @@ impl SymphoniaDecoder {
         let spec = *decode_result.spec();
         let buffer = Self::get_buffer(decode_result, spec);
 
-        let control = DecoderControl {
+        let control = TimeControl {
             total_duration: duration,
             time_elapsed: Arc::new(RwLock::new(Duration::from_secs(0))),
             seek_request: Arc::new(RwLock::new(None)),

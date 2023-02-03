@@ -7,4 +7,5 @@ edition = "2021"
 
 [dependencies]
 symphonia = "0.5.2"
-rodio = { version = "0.16.0", default-features = false, features = ["symphonia"]}
+rodio = { version = "0.16.0", default-features = false, features = ["symphonia"] }
+camino.workspace = true
