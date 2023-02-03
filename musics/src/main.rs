@@ -23,18 +23,31 @@ impl MusicsApp {
             player: Player::new(),
         }
     }
+
+    fn play_next_song(&mut self) {
+        self.player.play_file(Utf8Path::new(
+            "example_audio/subfolder/dark_mystery_snippet.mp3",
+        ))
+    }
+
+    fn play_previous_song(&mut self) {
+        self.player
+            .play_file(Utf8Path::new("example_audio/blank_holes_snippet.ogg"));
+    }
 }
 
 impl App for MusicsApp {
     fn update(&mut self, ctx: &Context, _frame: &mut Frame) {
         if self.player.song_finished_playing() {
-            self.player.play_file(Utf8Path::new(
-                "example_audio/subfolder/dark_mystery_snippet.mp3",
-            ))
+            self.play_next_song();
         }
 
         egui::TopBottomPanel::bottom("controls").show(ctx, |ui| {
             ui.horizontal(|ui| {
+                if ui.button("|<<").clicked() {
+                    self.play_previous_song();
+                }
+
                 if self.player.is_playing() {
                     if ui.button("||").clicked() {
                         self.player.pause();
@@ -46,6 +59,10 @@ impl App for MusicsApp {
                     } else {
                         self.player.resume();
                     }
+                }
+
+                if ui.button(">>|").clicked() {
+                    self.play_next_song();
                 }
 
                 let duration = self.player.song_duration();
