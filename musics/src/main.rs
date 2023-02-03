@@ -1,5 +1,5 @@
 use camino::Utf8Path;
-use eframe::egui::{Context, ProgressBar, Sense, Widget};
+use eframe::egui::{Context, ProgressBar, Sense, Ui, Widget};
 use eframe::{egui, App, Frame};
 use sound::Player;
 use std::time::Duration;
@@ -51,6 +51,9 @@ impl App for MusicsApp {
 
                 let duration = self.player.song_duration();
                 let elapsed = self.player.time_elapsed();
+
+                time_elapsed_widget(ui, duration, elapsed);
+
                 let fraction = elapsed.as_secs_f32() / duration.as_secs_f32();
 
                 let bar_response = ProgressBar::new(fraction).ui(ui);
@@ -71,4 +74,23 @@ impl App for MusicsApp {
 
         egui::CentralPanel::default().show(ctx, |ui| {});
     }
+}
+
+fn time_elapsed_widget(ui: &mut Ui, duration: Duration, elapsed: Duration) {
+    let text = format!(
+        "{} / {}",
+        duration_to_time_display(elapsed),
+        duration_to_time_display(duration)
+    );
+    ui.label(text);
+}
+
+fn duration_to_time_display(duration: Duration) -> String {
+    let total_seconds = duration.as_secs();
+    let hours = total_seconds / 3600;
+    let remaining = total_seconds % 3600;
+    let minutes = remaining / 60;
+    let seconds = remaining % 60;
+
+    format!("{hours}:{minutes:0>2}:{seconds:0>2}")
 }
