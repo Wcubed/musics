@@ -39,6 +39,10 @@ impl Library {
     pub fn songs(&self) -> Iter<SongId, Song> {
         self.0.iter()
     }
+
+    pub fn get_song(&self, id: SongId) -> Option<&Song> {
+        self.0.get(id)
+    }
 }
 
 new_key_type! { pub struct SongId; }

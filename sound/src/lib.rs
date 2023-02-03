@@ -7,7 +7,6 @@ use crate::decoder::{SymphoniaDecoder, TimeControl};
 use camino::Utf8Path;
 use rodio::{OutputStream, OutputStreamHandle, Sink};
 use std::fs::File;
-use std::io::sink;
 use std::time::Duration;
 use symphonia::core::io::MediaSourceStream;
 

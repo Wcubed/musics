@@ -1,8 +1,10 @@
 mod library;
+mod playlist;
 
 use crate::library::Library;
+use crate::playlist::Playlist;
 use camino::Utf8Path;
-use eframe::egui::{Context, ProgressBar, Sense, Ui, Widget};
+use eframe::egui::{Color32, Context, ProgressBar, RichText, Sense, Ui, Widget};
 use eframe::{egui, App, Frame};
 use sound::Player;
 use std::time::Duration;
@@ -19,6 +21,7 @@ fn main() {
 struct MusicsApp {
     player: Player,
     library: Library,
+    playlist: Playlist,
 }
 
 impl MusicsApp {
@@ -33,18 +36,28 @@ impl MusicsApp {
         MusicsApp {
             player: Player::new(),
             library,
+            playlist: Playlist::new(),
         }
     }
 
     fn play_next_song(&mut self) {
-        self.player.play_file(Utf8Path::new(
-            "example_audio/subfolder/dark_mystery_snippet.mp3",
-        ));
+        if let Some(song) = self
+            .playlist
+            .select_next_song(true)
+            .and_then(|id| self.library.get_song(id))
+        {
+            self.player.play_file(&song.path)
+        }
     }
 
     fn play_previous_song(&mut self) {
-        self.player
-            .play_file(Utf8Path::new("example_audio/blank_holes_snippet.ogg"));
+        if let Some(song) = self
+            .playlist
+            .select_previous_song(true)
+            .and_then(|id| self.library.get_song(id))
+        {
+            self.player.play_file(&song.path)
+        }
     }
 
     fn show_play_controls(&mut self, ui: &mut Ui) {
@@ -102,6 +115,21 @@ impl MusicsApp {
             }
         });
     }
+
+    fn show_playlist(&self, ui: &mut Ui) {
+        let current_song = self.playlist.current_song_index();
+
+        for (index, id) in self.playlist.songs().enumerate() {
+            if let Some(song) = self.library.get_song(*id) {
+                let mut title_text = RichText::new(&song.title);
+
+                if current_song == Some(index) {
+                    title_text = title_text.color(Color32::LIGHT_BLUE);
+                }
+                egui::Label::new(title_text).ui(ui);
+            }
+        }
+    }
 }
 
 impl App for MusicsApp {
@@ -115,9 +143,10 @@ impl App for MusicsApp {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            for (_id, song) in self.library.songs() {
+            self.show_playlist(ui);
+            for (id, song) in self.library.songs() {
                 if ui.button(&song.title).clicked() {
-                    self.player.play_file(&song.path);
+                    self.playlist.append_song(id);
                 }
             }
         });
