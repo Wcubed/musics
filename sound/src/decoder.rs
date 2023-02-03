@@ -1,9 +1,10 @@
-//! Combined and edited from these sources:
+//! Combined from the following sources, then edited to suit this programs needs:
 //! - https://github.com/tramhao/termusic/blob/master/src/player/rusty_backend/decoder/mod.rs
 //! - https://github.com/RustAudio/rodio/blob/master/src/decoder/symphonia.rs
 
 use rodio::decoder::DecoderError;
 use rodio::Source;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use symphonia::{
     core::{
@@ -19,6 +20,43 @@ use symphonia::{
     default::get_probe,
 };
 
+#[derive(Clone)]
+pub struct DecoderControl {
+    total_duration: Duration,
+    time_elapsed: Arc<RwLock<Duration>>,
+
+    /// If this is set to [`Some`], the next time the decoder is asked for a
+    /// sample, it will first seek to the specified time, and then set this value to [`None`].
+    seek_request: Arc<RwLock<Option<Duration>>>,
+}
+
+impl DecoderControl {
+    pub fn seek(&self, elapsed: Duration) {
+        *self.seek_request.write().unwrap() = Some(elapsed);
+        *self.time_elapsed.write().unwrap() = elapsed;
+    }
+
+    pub fn get_seek_request(&self) -> Option<Duration> {
+        self.seek_request.read().unwrap().clone()
+    }
+
+    pub fn time_elapsed(&self) -> Duration {
+        self.time_elapsed.read().unwrap().clone()
+    }
+
+    pub fn total_duration(&self) -> Duration {
+        self.total_duration
+    }
+
+    fn set_elapsed(&self, elapsed: Duration) {
+        *self.time_elapsed.write().unwrap() = elapsed;
+    }
+
+    fn clear_seek_request(&self) {
+        *self.seek_request.write().unwrap() = None;
+    }
+}
+
 // Decoder errors are not considered fatal.
 // The correct action is to just get a new packet and try again.
 // But a decode error in more than 3 consecutive packets is fatal.
@@ -30,8 +68,7 @@ pub struct SymphoniaDecoder {
     format: Box<dyn FormatReader>,
     buffer: SampleBuffer<i16>,
     spec: SignalSpec,
-    duration: Duration,
-    elapsed: Duration,
+    control: DecoderControl,
 }
 
 impl SymphoniaDecoder {
@@ -50,6 +87,12 @@ impl SymphoniaDecoder {
             Ok(Some(decoder)) => Ok(decoder),
             Ok(None) => Err(DecoderError::NoStreams),
         }
+    }
+
+    /// Hands out controllers, so that other threads can get info / control this decoder while
+    /// it is playing.
+    pub fn get_control(&self) -> DecoderControl {
+        self.control.clone()
     }
 
     fn init(mss: MediaSourceStream) -> symphonia::core::errors::Result<Option<Self>> {
@@ -91,14 +134,19 @@ impl SymphoniaDecoder {
         let spec = *decode_result.spec();
         let buffer = Self::get_buffer(decode_result, spec);
 
+        let control = DecoderControl {
+            total_duration: duration,
+            time_elapsed: Arc::new(RwLock::new(Duration::from_secs(0))),
+            seek_request: Arc::new(RwLock::new(None)),
+        };
+
         Ok(Some(Self {
             decoder,
             current_frame_offset: 0,
             format: probed.format,
             buffer,
             spec,
-            duration,
-            elapsed: Duration::from_secs(0),
+            control,
         }))
     }
 
@@ -125,7 +173,6 @@ impl SymphoniaDecoder {
         )
     }
 
-    #[inline]
     fn get_buffer(decoded: AudioBufferRef<'_>, spec: SignalSpec) -> SampleBuffer<i16> {
         let duration = decoded.capacity() as u64;
         let mut buffer = SampleBuffer::<i16>::new(duration, spec);
@@ -133,13 +180,6 @@ impl SymphoniaDecoder {
         buffer
     }
 
-    #[inline]
-    fn elapsed(&mut self) -> Duration {
-        self.elapsed
-    }
-
-    #[inline]
-    #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
     fn seek(&mut self, time: Duration) -> Option<Duration> {
         let nanos_per_sec = 1_000_000_000.0;
         match self.format.seek(
@@ -184,7 +224,7 @@ impl Source for SymphoniaDecoder {
 
     #[inline]
     fn total_duration(&self) -> Option<Duration> {
-        Some(self.duration)
+        Some(self.control.total_duration)
     }
 }
 
@@ -193,8 +233,13 @@ impl Iterator for SymphoniaDecoder {
 
     #[inline]
     fn next(&mut self) -> Option<i16> {
+        if let Some(duration) = self.control.get_seek_request() {
+            self.seek(duration);
+            self.control.clear_seek_request();
+        }
+
         if self.current_frame_offset == self.buffer.len() {
-            // let mut decode_errors: usize = 0;
+            let mut decode_errors: usize = 0;
             let decoded = loop {
                 match self.format.next_packet() {
                     Ok(packet) => match self.decoder.decode(&packet) {
@@ -203,19 +248,20 @@ impl Iterator for SymphoniaDecoder {
                             if let Some(track) = self.format.default_track() {
                                 if let Some(tb) = track.codec_params.time_base {
                                     let t = tb.calc_time(ts);
-                                    self.elapsed = Duration::from_secs(t.seconds)
-                                        + Duration::from_secs_f64(t.frac);
+                                    self.control.set_elapsed(
+                                        Duration::from_secs(t.seconds)
+                                            + Duration::from_secs_f64(t.frac),
+                                    );
                                 }
                             }
                             break decoded;
                         }
                         Err(e) => match e {
                             Error::DecodeError(_) => {
-                                // decode_errors += 1;
-                                // if decode_errors > MAX_DECODE_ERRORS {
-                                //     // return None;
-
-                                // }
+                                decode_errors += 1;
+                                if decode_errors > MAX_DECODE_ERRORS {
+                                    return None;
+                                }
                             }
                             _ => return None,
                         },
