@@ -7,3 +7,6 @@ edition = "2021"
 
 [dependencies]
 sound = { path = "../sound" }
+
+eframe = "0.20.1"
+camino.workspace = true

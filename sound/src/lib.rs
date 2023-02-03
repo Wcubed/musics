@@ -71,6 +71,19 @@ impl Player {
         }
     }
 
+    pub fn pause(&self) {
+        self.sink.pause();
+    }
+
+    /// Resumes after having been paused. Does nothing if there is no song queued.
+    pub fn resume(&self) {
+        self.sink.play()
+    }
+
+    pub fn is_playing(&self) -> bool {
+        !self.sink.is_paused() && !self.sink.empty()
+    }
+
     /// Gives the elapsed time in the current song.
     /// Returns 0 if there is no song.
     pub fn time_elapsed(&self) -> Duration {
