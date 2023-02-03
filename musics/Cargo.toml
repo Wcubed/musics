@@ -10,3 +10,4 @@ sound = { path = "../sound" }
 
 eframe = "0.20.1"
 camino.workspace = true
+slotmap = "1.0.6"

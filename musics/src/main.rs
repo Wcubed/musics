@@ -1,4 +1,7 @@
-use camino::Utf8Path;
+mod library;
+
+use crate::library::Library;
+use camino::{Utf8Path, Utf8PathBuf};
 use eframe::egui::{Context, ProgressBar, Sense, Ui, Widget};
 use eframe::{egui, App, Frame};
 use sound::Player;
@@ -15,19 +18,24 @@ fn main() {
 
 struct MusicsApp {
     player: Player,
+    library: Library,
 }
 
 impl MusicsApp {
     fn new(_cc: &eframe::CreationContext<'_>) -> Self {
+        let mut library = Library::new();
+        library.insert_from_directory(Utf8Path::new("example_audio"));
+
         MusicsApp {
             player: Player::new(),
+            library,
         }
     }
 
     fn play_next_song(&mut self) {
         self.player.play_file(Utf8Path::new(
             "example_audio/subfolder/dark_mystery_snippet.mp3",
-        ))
+        ));
     }
 
     fn play_previous_song(&mut self) {
@@ -88,7 +96,11 @@ impl App for MusicsApp {
             });
         });
 
-        egui::CentralPanel::default().show(ctx, |_ui| {});
+        egui::CentralPanel::default().show(ctx, |ui| {
+            for (_id, song) in self.library.songs() {
+                ui.label(song.path.as_str());
+            }
+        });
 
         if self.player.is_playing() {
             // If we are playing music, we need to update the UI periodically,

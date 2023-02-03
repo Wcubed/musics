@@ -10,6 +10,9 @@ use std::fs::File;
 use std::time::Duration;
 use symphonia::core::io::MediaSourceStream;
 
+// TODO (2023-02-03): Add all the supported extensions.
+pub const SUPPORTED_EXTENSIONS: &[&str] = &["ogg", "mp3"];
+
 pub struct Player {
     /// Hard reference kept to prevent it from going out of scope.
     _stream: OutputStream,
