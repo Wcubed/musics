@@ -18,7 +18,7 @@ struct MusicsApp {
 }
 
 impl MusicsApp {
-    fn new(cc: &eframe::CreationContext<'_>) -> Self {
+    fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         MusicsApp {
             player: Player::new(),
         }
@@ -26,12 +26,11 @@ impl MusicsApp {
 }
 
 impl App for MusicsApp {
-    fn update(&mut self, ctx: &Context, frame: &mut Frame) {
-        if self.player.is_playing() {
-            // If we are playing music, we need to update the UI periodically,
-            // otherwise the song progress will not be shown.
-            // And we would not realize that a song has finished playing.
-            ctx.request_repaint_after(Duration::from_secs(1));
+    fn update(&mut self, ctx: &Context, _frame: &mut Frame) {
+        if self.player.song_finished_playing() {
+            self.player.play_file(Utf8Path::new(
+                "example_audio/subfolder/dark_mystery_snippet.mp3",
+            ))
         }
 
         egui::TopBottomPanel::bottom("controls").show(ctx, |ui| {
@@ -65,14 +64,21 @@ impl App for MusicsApp {
                         let bar_width = response.rect.width();
                         let fraction = x_on_bar / bar_width;
 
-                        let seek_duration = duration.as_secs_f32() * fraction;
+                        let seek_duration = (duration.as_secs_f32() * fraction).max(0.);
                         self.player.seek(Duration::from_secs_f32(seek_duration));
                     }
                 }
             });
         });
 
-        egui::CentralPanel::default().show(ctx, |ui| {});
+        egui::CentralPanel::default().show(ctx, |_ui| {});
+
+        if self.player.is_playing() {
+            // If we are playing music, we need to update the UI periodically,
+            // otherwise the song progress will not be shown.
+            // And we would not realize that a song has finished playing.
+            ctx.request_repaint_after(Duration::from_secs(1));
+        }
     }
 }
 

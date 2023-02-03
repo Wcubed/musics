@@ -32,6 +32,17 @@ pub struct TimeControl {
 }
 
 impl TimeControl {
+    /// Returns a time control that is not connected to a decoder.
+    /// This can be substituted for a connected one, because
+    /// operations on an unconnected decoder don't fail.
+    pub fn create_unconnected() -> Self {
+        Self {
+            total_duration: Default::default(),
+            time_elapsed: Arc::new(Default::default()),
+            seek_request: Arc::new(Default::default()),
+        }
+    }
+
     /// Instructs the connected decoder to seek.
     /// Seeks to the end if the given time is larger than the total duration.
     pub fn seek(&self, time: Duration) {
@@ -42,11 +53,11 @@ impl TimeControl {
     }
 
     pub fn get_seek_request(&self) -> Option<Duration> {
-        self.seek_request.read().unwrap().clone()
+        *self.seek_request.read().unwrap()
     }
 
     pub fn time_elapsed(&self) -> Duration {
-        self.time_elapsed.read().unwrap().clone()
+        *self.time_elapsed.read().unwrap()
     }
 
     pub fn total_duration(&self) -> Duration {

@@ -14,8 +14,9 @@ pub struct Player {
     /// Hard reference kept to prevent it from going out of scope.
     _stream: OutputStream,
     sink: Sink,
-    /// [`None`] if there is no song queued or playing at the moment.
-    time_control: Option<TimeControl>,
+    /// When there is no song queued, this time control is not connected to anything.
+    /// It will return the values of the previous song.
+    time_control: TimeControl,
 }
 
 impl Default for Player {
@@ -24,11 +25,14 @@ impl Default for Player {
         let (_stream, stream_handle) =
             OutputStream::try_default().expect("Could not get output stream");
         let sink = Sink::try_new(&stream_handle).expect("Could not create sink");
+        // A sink starts unpaused by default, but for us an unpaused + empty sink means
+        // the next song should be played automatically. Therefore we pause it.
+        sink.pause();
 
         Player {
             _stream,
             sink,
-            time_control: None,
+            time_control: TimeControl::create_unconnected(),
         }
     }
 }
@@ -45,7 +49,7 @@ impl Player {
         let stream = MediaSourceStream::new(Box::new(audio_file), Default::default());
 
         let decoder = SymphoniaDecoder::new(stream).expect("Creating decoder should work");
-        self.time_control = Some(decoder.get_control());
+        self.time_control = decoder.get_control();
 
         self.sink.empty();
         self.sink.append(decoder);
@@ -55,20 +59,18 @@ impl Player {
     /// Duration of the current song.
     /// Returns 0 if there is no current song.
     pub fn song_duration(&self) -> Duration {
-        if let Some(control) = &self.time_control {
-            control.total_duration()
-        } else {
+        if self.empty() {
             Duration::from_secs(0)
+        } else {
+            self.time_control.total_duration()
         }
     }
 
     /// Seeks on the currently playing audio.
     /// Seeks to the end if the given time is longer than the total duration of the song.
-    /// Does nothing if no song is playing or queued.
+    /// Does nothing if no song is queued.
     pub fn seek(&self, time: Duration) {
-        if let Some(control) = &self.time_control {
-            control.seek(time)
-        }
+        self.time_control.seek(time)
     }
 
     pub fn pause(&self) {
@@ -84,13 +86,19 @@ impl Player {
         !self.sink.is_paused() && !self.sink.empty()
     }
 
+    /// Returns `true` if there is currently no sound because the song has finished playing.
+    /// For an external caller this indicates a new song can be started, if there is one available.
+    pub fn song_finished_playing(&self) -> bool {
+        self.sink.empty() && !self.sink.is_paused()
+    }
+
     /// Gives the elapsed time in the current song.
     /// Returns 0 if there is no song.
     pub fn time_elapsed(&self) -> Duration {
-        if let Some(control) = &self.time_control {
-            control.time_elapsed()
-        } else {
+        if self.empty() {
             Duration::from_secs(0)
+        } else {
+            self.time_control.time_elapsed()
         }
     }
 
@@ -128,7 +136,10 @@ mod tests {
         player.seek(Duration::from_secs(20));
         std::thread::sleep(Duration::from_millis(100));
         let elapsed = player.time_elapsed().as_secs();
-        assert_eq!(elapsed, 17);
+        assert_eq!(
+            elapsed, 0,
+            "Time elapsed should be 0, because the song is done playing."
+        );
         assert!(player.empty(), "Player should be empty, because the song is only 17 seconds, and we asked it to seek beyond that.")
     }
 }
