@@ -60,6 +60,16 @@ impl MusicsApp {
         }
     }
 
+    fn play_song_by_playlists_index(&mut self, index: usize) {
+        if let Some(song) = self
+            .playlist
+            .select_song(index)
+            .and_then(|id| self.library.get_song(id))
+        {
+            self.player.play_file(&song.path)
+        }
+    }
+
     fn show_play_controls(&mut self, ui: &mut Ui) {
         ui.horizontal(|ui| {
             let duration = self.player.song_duration();
@@ -113,11 +123,21 @@ impl MusicsApp {
             if volume != self.player.volume() {
                 self.player.set_volume(volume);
             }
+
+            if let Some(current_song) = self
+                .playlist
+                .current_song_id()
+                .and_then(|id| self.library.get_song(id))
+            {
+                ui.label(&current_song.title);
+            }
         });
     }
 
-    fn show_playlist(&self, ui: &mut Ui) {
+    fn show_playlist(&mut self, ui: &mut Ui) {
         let current_song = self.playlist.current_song_index();
+
+        let mut maybe_song_index_to_play = None;
 
         for (index, id) in self.playlist.songs().enumerate() {
             if let Some(song) = self.library.get_song(*id) {
@@ -126,8 +146,19 @@ impl MusicsApp {
                 if current_song == Some(index) {
                     title_text = title_text.color(Color32::LIGHT_BLUE);
                 }
-                egui::Label::new(title_text).ui(ui);
+
+                if egui::Label::new(title_text)
+                    .sense(Sense::click())
+                    .ui(ui)
+                    .clicked()
+                {
+                    maybe_song_index_to_play = Some(index);
+                }
             }
+        }
+
+        if let Some(index) = maybe_song_index_to_play {
+            self.play_song_by_playlists_index(index);
         }
     }
 }

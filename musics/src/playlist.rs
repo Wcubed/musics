@@ -74,7 +74,22 @@ impl Playlist {
             .cloned()
     }
 
+    pub fn select_song(&mut self, index: usize) -> Option<SongId> {
+        if index <= self.songs.len() {
+            self.current_song_index = Some(index);
+            self.songs.get(index).cloned()
+        } else {
+            None
+        }
+    }
+
     pub fn current_song_index(&self) -> Option<usize> {
         self.current_song_index
+    }
+
+    pub fn current_song_id(&self) -> Option<SongId> {
+        self.current_song_index
+            .and_then(|index| self.songs.get(index))
+            .cloned()
     }
 }
