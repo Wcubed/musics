@@ -98,7 +98,9 @@ impl App for MusicsApp {
 
         egui::CentralPanel::default().show(ctx, |ui| {
             for (_id, song) in self.library.songs() {
-                ui.label(song.path.as_str());
+                if ui.button(&song.title).clicked() {
+                    self.player.play_file(&song.path);
+                }
             }
         });
 

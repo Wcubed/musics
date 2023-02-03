@@ -44,13 +44,15 @@ impl Library {
 new_key_type! { pub struct SongId; }
 
 pub struct Song {
+    pub title: String,
     pub path: Utf8PathBuf,
 }
 
 impl Song {
     fn from_file(path: Utf8PathBuf) -> Self {
-        // TODO (2023-02-03): Load metadata?
-        Self { path }
+        // TODO (2023-02-03): Load metadata from the file?
+        let title = path.file_stem().unwrap_or("Unnamed").replace('_', " ");
+        Self { title, path }
     }
 }
 
