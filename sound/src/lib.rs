@@ -62,6 +62,10 @@ impl Player {
         self.sink.play();
     }
 
+    pub fn stop(&mut self) {
+        self.replace_sink();
+    }
+
     /// For the current version of rodio, the only way to empty out a sink seems to be to
     /// create a new one.
     fn replace_sink(&mut self) {

@@ -150,6 +150,7 @@ impl MusicsApp {
 
         let mut maybe_song_index_to_play = None;
         let mut move_dragged_song_to_target_index = None;
+        let mut remove_song = None;
 
         for (index, id) in self.playlist.songs().enumerate() {
             if let Some(song) = self.library.get_song(*id) {
@@ -175,6 +176,10 @@ impl MusicsApp {
                                 }
                             }
                         }
+                    }
+
+                    if ui.button("X").clicked() {
+                        remove_song = Some(index);
                     }
 
                     let mut title_text = RichText::new(&song.title);
@@ -207,6 +212,14 @@ impl MusicsApp {
             self.playlist
                 .switch_songs_by_index(source_index, target_index);
             self.dragged_playlist_index = Some(target_index);
+        }
+
+        if let Some(remove_index) = remove_song {
+            self.playlist.remove_song_by_index(remove_index);
+            if self.playlist.current_song_index().is_none() {
+                // The user removed the currently playing song.
+                self.player.stop();
+            }
         }
     }
 }
