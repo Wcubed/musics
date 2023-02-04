@@ -152,54 +152,75 @@ impl MusicsApp {
         let mut move_dragged_song_to_target_index = None;
         let mut remove_song = None;
 
-        for (index, id) in self.playlist.songs().enumerate() {
-            if let Some(song) = self.library.get_song(*id) {
-                ui.horizontal(|ui| {
-                    let id_source = "playlist_drag";
-                    let drag_id = Id::new(id_source).with(index);
+        // `interact_size` is the size of 1 button.
+        let row_height = ui.spacing().interact_size.y;
 
-                    let drag_rect = ui.label("::").rect;
-                    let drag_response = ui.interact(drag_rect, drag_id, Sense::drag());
+        egui::ScrollArea::both()
+            .auto_shrink([false, false])
+            .show_rows(
+                ui,
+                row_height,
+                self.playlist.song_count(),
+                |ui, row_range| {
+                    for (index, id) in self
+                        .playlist
+                        .songs()
+                        .enumerate()
+                        .skip(row_range.start)
+                        .take(row_range.len())
+                    {
+                        if let Some(song) = self.library.get_song(*id) {
+                            ui.horizontal(|ui| {
+                                let id_source = "playlist_drag";
+                                let drag_id = Id::new(id_source).with(index);
 
-                    if drag_response.drag_started() {
-                        self.dragged_playlist_index = Some(index);
-                    } else if drag_response.hovered() && !ui.memory().is_anything_being_dragged() {
-                        ui.output().cursor_icon = CursorIcon::Grab;
-                    }
+                                let drag_rect = ui.label("::").rect;
+                                let drag_response = ui.interact(drag_rect, drag_id, Sense::drag());
 
-                    if let Some(dragged_index) = self.dragged_playlist_index {
-                        if dragged_index != index {
-                            if let Some(last_pos) = ui.input().pointer.hover_pos() {
-                                if last_pos.y >= drag_rect.top() && last_pos.y <= drag_rect.bottom()
+                                if drag_response.drag_started() {
+                                    self.dragged_playlist_index = Some(index);
+                                } else if drag_response.hovered()
+                                    && !ui.memory().is_anything_being_dragged()
                                 {
-                                    move_dragged_song_to_target_index = Some(index);
+                                    ui.output().cursor_icon = CursorIcon::Grab;
                                 }
-                            }
+
+                                if let Some(dragged_index) = self.dragged_playlist_index {
+                                    if dragged_index != index {
+                                        if let Some(last_pos) = ui.input().pointer.hover_pos() {
+                                            if last_pos.y >= drag_rect.top()
+                                                && last_pos.y <= drag_rect.bottom()
+                                            {
+                                                move_dragged_song_to_target_index = Some(index);
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if ui.button("X").clicked() {
+                                    remove_song = Some(index);
+                                }
+
+                                let mut title_text = RichText::new(&song.title);
+
+                                if self.dragged_playlist_index == Some(index) {
+                                    title_text = title_text.color(Color32::LIGHT_GREEN);
+                                } else if current_song == Some(index) {
+                                    title_text = title_text.color(Color32::LIGHT_BLUE);
+                                }
+
+                                if egui::Label::new(title_text)
+                                    .sense(Sense::click())
+                                    .ui(ui)
+                                    .clicked()
+                                {
+                                    maybe_song_index_to_play = Some(index);
+                                }
+                            });
                         }
                     }
-
-                    if ui.button("X").clicked() {
-                        remove_song = Some(index);
-                    }
-
-                    let mut title_text = RichText::new(&song.title);
-
-                    if self.dragged_playlist_index == Some(index) {
-                        title_text = title_text.color(Color32::LIGHT_GREEN);
-                    } else if current_song == Some(index) {
-                        title_text = title_text.color(Color32::LIGHT_BLUE);
-                    }
-
-                    if egui::Label::new(title_text)
-                        .sense(Sense::click())
-                        .ui(ui)
-                        .clicked()
-                    {
-                        maybe_song_index_to_play = Some(index);
-                    }
-                });
-            }
-        }
+                },
+            );
 
         if let Some(index) = maybe_song_index_to_play {
             self.play_song_by_playlists_index(index);
@@ -234,13 +255,16 @@ impl App for MusicsApp {
             self.show_play_controls(ui);
         });
 
-        egui::CentralPanel::default().show(ctx, |ui| {
-            self.show_playlist(ui);
+        egui::SidePanel::right("library").show(ctx, |ui| {
             for (id, song) in self.library.songs() {
                 if ui.button(&song.title).clicked() {
                     self.playlist.append_song(id);
                 }
             }
+        });
+
+        egui::CentralPanel::default().show(ctx, |ui| {
+            self.show_playlist(ui);
         });
 
         if self.player.is_playing() {

@@ -1,1 +1,1 @@
-A cross-platform (linux / windows) music player for personal use.
+A quick-and-dirty cross-platform (linux / windows) music player for personal use.

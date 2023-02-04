@@ -18,6 +18,10 @@ impl Playlist {
         self.songs.iter()
     }
 
+    pub fn song_count(&self) -> usize {
+        self.songs.len()
+    }
+
     pub fn append_song(&mut self, song: SongId) {
         self.songs.push(song)
     }
