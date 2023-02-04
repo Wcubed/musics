@@ -83,6 +83,21 @@ impl Playlist {
         }
     }
 
+    pub fn switch_songs_by_index(&mut self, source_index: usize, target_index: usize) {
+        if source_index < self.songs.len() && target_index < self.songs.len() {
+            self.songs.swap(source_index, target_index);
+
+            // Make sure to swap the currently playing song as well, if necessary.
+            if let Some(current_song) = self.current_song_index {
+                if current_song == source_index {
+                    self.current_song_index = Some(target_index);
+                } else if current_song == target_index {
+                    self.current_song_index = Some(source_index);
+                }
+            }
+        }
+    }
+
     pub fn current_song_index(&self) -> Option<usize> {
         self.current_song_index
     }

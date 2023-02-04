@@ -4,7 +4,7 @@ mod playlist;
 use crate::library::Library;
 use crate::playlist::Playlist;
 use camino::Utf8Path;
-use eframe::egui::{Color32, Context, ProgressBar, RichText, Sense, Ui, Widget};
+use eframe::egui::{Color32, Context, CursorIcon, Id, ProgressBar, RichText, Sense, Ui, Widget};
 use eframe::{egui, App, Frame};
 use sound::Player;
 use std::time::Duration;
@@ -22,6 +22,8 @@ struct MusicsApp {
     player: Player,
     library: Library,
     playlist: Playlist,
+    /// Records whether the user is currently dragging a song in the playlist.
+    dragged_playlist_index: Option<usize>,
 }
 
 impl MusicsApp {
@@ -37,6 +39,7 @@ impl MusicsApp {
             player: Player::new(),
             library,
             playlist: Playlist::new(),
+            dragged_playlist_index: None,
         }
     }
 
@@ -137,28 +140,73 @@ impl MusicsApp {
     fn show_playlist(&mut self, ui: &mut Ui) {
         let current_song = self.playlist.current_song_index();
 
+        if !ui.memory().is_anything_being_dragged() {
+            self.dragged_playlist_index = None
+        }
+
+        if self.dragged_playlist_index.is_some() {
+            ui.output().cursor_icon = CursorIcon::Grabbing;
+        }
+
         let mut maybe_song_index_to_play = None;
+        let mut move_dragged_song_to_target_index = None;
 
         for (index, id) in self.playlist.songs().enumerate() {
             if let Some(song) = self.library.get_song(*id) {
-                let mut title_text = RichText::new(&song.title);
+                ui.horizontal(|ui| {
+                    let id_source = "playlist_drag";
+                    let drag_id = Id::new(id_source).with(index);
 
-                if current_song == Some(index) {
-                    title_text = title_text.color(Color32::LIGHT_BLUE);
-                }
+                    let drag_rect = ui.label("::").rect;
+                    let drag_response = ui.interact(drag_rect, drag_id, Sense::drag());
 
-                if egui::Label::new(title_text)
-                    .sense(Sense::click())
-                    .ui(ui)
-                    .clicked()
-                {
-                    maybe_song_index_to_play = Some(index);
-                }
+                    if drag_response.drag_started() {
+                        self.dragged_playlist_index = Some(index);
+                    } else if drag_response.hovered() && !ui.memory().is_anything_being_dragged() {
+                        ui.output().cursor_icon = CursorIcon::Grab;
+                    }
+
+                    if let Some(dragged_index) = self.dragged_playlist_index {
+                        if dragged_index != index {
+                            if let Some(last_pos) = ui.input().pointer.hover_pos() {
+                                if last_pos.y >= drag_rect.top() && last_pos.y <= drag_rect.bottom()
+                                {
+                                    move_dragged_song_to_target_index = Some(index);
+                                }
+                            }
+                        }
+                    }
+
+                    let mut title_text = RichText::new(&song.title);
+
+                    if self.dragged_playlist_index == Some(index) {
+                        title_text = title_text.color(Color32::LIGHT_GREEN);
+                    } else if current_song == Some(index) {
+                        title_text = title_text.color(Color32::LIGHT_BLUE);
+                    }
+
+                    if egui::Label::new(title_text)
+                        .sense(Sense::click())
+                        .ui(ui)
+                        .clicked()
+                    {
+                        maybe_song_index_to_play = Some(index);
+                    }
+                });
             }
         }
 
         if let Some(index) = maybe_song_index_to_play {
             self.play_song_by_playlists_index(index);
+        }
+
+        if let (Some(source_index), Some(target_index)) = (
+            self.dragged_playlist_index,
+            move_dragged_song_to_target_index,
+        ) {
+            self.playlist
+                .switch_songs_by_index(source_index, target_index);
+            self.dragged_playlist_index = Some(target_index);
         }
     }
 }
