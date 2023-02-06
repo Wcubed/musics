@@ -1,9 +1,11 @@
 mod config;
 mod library;
+mod library_search_view;
 mod playlist;
 
 use crate::config::{Config, ConfigView};
 use crate::library::Library;
+use crate::library_search_view::{LibrarySearchView, LibraryViewCommand};
 use crate::playlist::Playlist;
 use camino::Utf8Path;
 use eframe::egui::{
@@ -27,6 +29,7 @@ struct MusicsApp {
     config_view: ConfigView,
     player: Player,
     library: Library,
+    library_search_view: LibrarySearchView,
     playlist: Playlist,
     /// Records whether the user is currently dragging a song in the playlist.
     dragged_playlist_index: Option<usize>,
@@ -57,6 +60,7 @@ impl MusicsApp {
             config_view: ConfigView::new(),
             player: Player::new(),
             library,
+            library_search_view: LibrarySearchView::new(),
             playlist: Playlist::new(),
             dragged_playlist_index: None,
         }
@@ -263,36 +267,6 @@ impl MusicsApp {
             }
         }
     }
-
-    fn show_library(&mut self, ui: &mut Ui) {
-        let text_style = egui::TextStyle::Body;
-        let row_height = ui.text_style_height(&text_style);
-
-        egui::ScrollArea::both()
-            .auto_shrink([false, false])
-            .show_rows(
-                ui,
-                row_height,
-                self.library.song_count(),
-                |ui, row_range| {
-                    for (id, song) in self
-                        .library
-                        .songs()
-                        .skip(row_range.start)
-                        .take(row_range.len())
-                    {
-                        let song_response = egui::Label::new(&song.title)
-                            .wrap(false)
-                            .sense(Sense::click())
-                            .ui(ui);
-
-                        if song_response.clicked() {
-                            self.playlist.append_song(id);
-                        }
-                    }
-                },
-            );
-    }
 }
 
 impl App for MusicsApp {
@@ -308,6 +282,10 @@ impl App for MusicsApp {
                 if ui.button("Config").clicked() {
                     self.config_view.open_window();
                 }
+
+                ui.separator();
+
+                self.library_search_view.show_search_box(ui, &self.library);
             });
         });
 
@@ -315,9 +293,20 @@ impl App for MusicsApp {
             self.show_play_controls(ui);
         });
 
-        egui::SidePanel::right("library").show(ctx, |ui| {
-            self.show_library(ui);
-        });
+        if self.library_search_view.should_show_results() {
+            egui::SidePanel::right("search_results").show(ctx, |ui| {
+                let command = self
+                    .library_search_view
+                    .show_search_results(ui, &self.library);
+
+                match command {
+                    LibraryViewCommand::None => {}
+                    LibraryViewCommand::AddSongToPlaylist(id) => {
+                        self.playlist.append_song(id);
+                    }
+                }
+            });
+        }
 
         egui::CentralPanel::default().show(ctx, |ui| {
             self.show_playlist(ui);
