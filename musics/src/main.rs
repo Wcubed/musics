@@ -45,6 +45,11 @@ struct MusicsApp {
     playlist: Playlist,
     /// Records whether the user is currently dragging a song in the playlist.
     dragged_playlist_index: Option<usize>,
+    /// In overlay mode, the program only shows the playlist controls, and becomes very small.
+    overlay_mode: bool,
+    /// When in overlay mode, this remembers how large the ui was when it _wasn't_ in overlay mode.
+    /// This so it can be restored later.
+    ui_size: egui::Vec2,
 }
 
 impl MusicsApp {
@@ -75,6 +80,8 @@ impl MusicsApp {
             library_search_view: LibrarySearchView::new(),
             playlist: Playlist::new(),
             dragged_playlist_index: None,
+            overlay_mode: false,
+            ui_size: egui::Vec2::new(0., 0.),
         }
     }
 
@@ -108,31 +115,51 @@ impl MusicsApp {
         }
     }
 
-    fn show_play_controls(&mut self, ui: &mut Ui) {
+    fn show_play_controls(&mut self, ui: &mut Ui, frame: &mut Frame) {
+        if !self.overlay_mode {
+            ui.horizontal(|ui| {
+                let duration = self.player.song_duration();
+                let elapsed = self.player.time_elapsed();
+
+                time_elapsed_widget(ui, duration, elapsed);
+
+                let fraction = elapsed.as_secs_f32() / duration.as_secs_f32();
+
+                let bar_response = ProgressBar::new(fraction).ui(ui);
+                let response = bar_response.interact(Sense::click_and_drag());
+
+                if let Some(interact_pos) = response.interact_pointer_pos() {
+                    if response.drag_released() || response.clicked() {
+                        let x_on_bar = interact_pos.x - response.rect.min.x;
+                        let bar_width = response.rect.width();
+                        let fraction = x_on_bar / bar_width;
+
+                        let seek_duration = (duration.as_secs_f32() * fraction).max(0.);
+                        self.player.seek(Duration::from_secs_f32(seek_duration));
+                    }
+                }
+            });
+        }
+
         ui.horizontal(|ui| {
-            let duration = self.player.song_duration();
-            let elapsed = self.player.time_elapsed();
+            if self.overlay_mode {
+                // TODO (2023-02-06): Allow dragging the window using this label.
+                let window_drag_label_response = egui::Label::new("::").sense(Sense::drag()).ui(ui);
 
-            time_elapsed_widget(ui, duration, elapsed);
+                if window_drag_label_response.hovered() {
+                    ui.output().cursor_icon = CursorIcon::Grab;
+                } else if window_drag_label_response.dragged() {
+                    ui.output().cursor_icon = CursorIcon::Grabbing;
 
-            let fraction = elapsed.as_secs_f32() / duration.as_secs_f32();
-
-            let bar_response = ProgressBar::new(fraction).ui(ui);
-            let response = bar_response.interact(Sense::click_and_drag());
-
-            if let Some(interact_pos) = response.interact_pointer_pos() {
-                if response.drag_released() || response.clicked() {
-                    let x_on_bar = interact_pos.x - response.rect.min.x;
-                    let bar_width = response.rect.width();
-                    let fraction = x_on_bar / bar_width;
-
-                    let seek_duration = (duration.as_secs_f32() * fraction).max(0.);
-                    self.player.seek(Duration::from_secs_f32(seek_duration));
+                    if let (Some(current_window_pos), Some(mouse_pos)) = (
+                        frame.info().window_info.position,
+                        window_drag_label_response.interact_pointer_pos(),
+                    ) {
+                        let global_mouse_pos = current_window_pos + mouse_pos.to_vec2();
+                    }
                 }
             }
-        });
 
-        ui.horizontal(|ui| {
             if ui.button("|<<").clicked() {
                 self.play_previous_song();
             }
@@ -162,6 +189,8 @@ impl MusicsApp {
                 self.player.set_volume(volume);
             }
 
+            ui.toggle_value(&mut self.overlay_mode, "Overlay");
+
             if let Some(current_song) = self
                 .playlist
                 .current_song_id()
@@ -187,14 +216,13 @@ impl MusicsApp {
         let mut move_dragged_song_to_target_index = None;
         let mut remove_song = None;
 
-        // `interact_size` is the size of 1 button.
-        let row_height = ui.spacing().interact_size.y;
+        let button_height = ui.spacing().interact_size.y;
 
         egui::ScrollArea::both()
             .auto_shrink([false, false])
             .show_rows(
                 ui,
-                row_height,
+                button_height,
                 self.playlist.song_count(),
                 |ui, row_range| {
                     for (index, id) in self
@@ -239,9 +267,9 @@ impl MusicsApp {
                                 let mut title_text = RichText::new(&song.title);
 
                                 if self.dragged_playlist_index == Some(index) {
-                                    title_text = title_text.color(Color32::LIGHT_GREEN);
-                                } else if current_song == Some(index) {
                                     title_text = title_text.color(Color32::LIGHT_BLUE);
+                                } else if current_song == Some(index) {
+                                    title_text = title_text.color(Color32::LIGHT_GREEN);
                                 }
 
                                 if egui::Label::new(title_text)
@@ -301,58 +329,87 @@ impl MusicsApp {
 }
 
 impl App for MusicsApp {
-    fn update(&mut self, ctx: &Context, _frame: &mut Frame) {
+    fn update(&mut self, ctx: &Context, frame: &mut Frame) {
+        let previous_overlay_value = self.overlay_mode.clone();
+
         if self.player.song_finished_playing() {
             self.play_next_song();
         }
 
         self.config_view.show(ctx, &mut self.config);
 
-        egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                if ui.button("Config").clicked() {
-                    self.config_view.open_window();
-                }
-
-                let add_full_library_response = ui.button("+ Full library");
-                if add_full_library_response.clicked() {
-                    // TODO (2023-02-06): Create an infinite, self-filling random playlist instead.
-                    let mut songs: Vec<SongId> = self.library.songs().map(|(id, _)| id).collect();
-                    fastrand::shuffle(&mut songs);
-                    self.playlist.append_songs(&songs);
-                }
-                add_full_library_response
-                    .on_hover_text("Adds the full library randomized to the playlist.");
-
-                ui.separator();
-
-                let command = self.library_search_view.show_search_box(ui, &self.library);
-                self.handle_library_view_command(command);
+        if self.overlay_mode {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                self.show_play_controls(ui, frame);
             });
-        });
+        } else {
+            egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    if ui.button("Config").clicked() {
+                        self.config_view.open_window();
+                    }
 
-        egui::TopBottomPanel::bottom("controls").show(ctx, |ui| {
-            self.show_play_controls(ui);
-        });
+                    let add_full_library_response = ui.button("+ Full library");
+                    if add_full_library_response.clicked() {
+                        // TODO (2023-02-06): Create an infinite, self-filling random playlist instead.
+                        let mut songs: Vec<SongId> =
+                            self.library.songs().map(|(id, _)| id).collect();
+                        fastrand::shuffle(&mut songs);
+                        self.playlist.append_songs(&songs);
+                    }
+                    add_full_library_response
+                        .on_hover_text("Adds the full library randomized to the playlist.");
 
-        if self.library_search_view.should_show_results() {
-            egui::SidePanel::right("search_results").show(ctx, |ui| {
-                let command = self
-                    .library_search_view
-                    .show_search_results(ui, &self.library);
-                self.handle_library_view_command(command);
+                    ui.separator();
+
+                    let command = self.library_search_view.show_search_box(ui, &self.library);
+                    self.handle_library_view_command(command);
+                });
+            });
+
+            egui::TopBottomPanel::bottom("controls").show(ctx, |ui| {
+                self.show_play_controls(ui, frame);
+            });
+
+            if self.library_search_view.should_show_results() {
+                egui::SidePanel::right("search_results").show(ctx, |ui| {
+                    let command = self
+                        .library_search_view
+                        .show_search_results(ui, &self.library);
+                    self.handle_library_view_command(command);
+                });
+            }
+
+            egui::CentralPanel::default().show(ctx, |ui| {
+                self.show_playlist(ui);
             });
         }
-
-        egui::CentralPanel::default().show(ctx, |ui| {
-            self.show_playlist(ui);
-        });
 
         if self.player.is_playing() {
             // If we are playing music, we need to update the UI periodically,
             // otherwise the song progress will not be shown.
             // And we would not realize that a song has finished playing.
             ctx.request_repaint_after(Duration::from_secs(1));
+        }
+
+        if self.overlay_mode != previous_overlay_value {
+            frame.set_decorations(!self.overlay_mode);
+            frame.set_always_on_top(self.overlay_mode);
+
+            if self.overlay_mode {
+                self.ui_size = frame.info().window_info.size;
+
+                let button_height = ctx.style().spacing.interact_size.y;
+                let window_margin = ctx.style().spacing.window_margin;
+
+                let window_height = button_height + window_margin.top + window_margin.bottom;
+                // TODO (2023-02-06): remember overlay x size.
+                frame.set_window_size(egui::Vec2::new(600.0, window_height))
+            } else {
+                frame.set_window_size(self.ui_size);
+            }
+            // TODO (2023-02-06): Collapse window to a minimum size.
+            // TODO (2023-02-06): Allow moving / horizontally resizing the window in this mode.
         }
     }
 
