@@ -1,11 +1,15 @@
+mod config;
 mod library;
 mod playlist;
 
+use crate::config::{Config, ConfigView};
 use crate::library::Library;
 use crate::playlist::Playlist;
 use camino::Utf8Path;
-use eframe::egui::{Color32, Context, CursorIcon, Id, ProgressBar, RichText, Sense, Ui, Widget};
-use eframe::{egui, App, Frame};
+use eframe::egui::{
+    Color32, Context, CursorIcon, Id, ProgressBar, RichText, Sense, Ui, Visuals, Widget,
+};
+use eframe::{egui, App, Frame, Storage};
 use sound::Player;
 use std::time::Duration;
 
@@ -19,6 +23,8 @@ fn main() {
 }
 
 struct MusicsApp {
+    config: Config,
+    config_view: ConfigView,
     player: Player,
     library: Library,
     playlist: Playlist,
@@ -28,14 +34,27 @@ struct MusicsApp {
 
 impl MusicsApp {
     fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        let config: Config = if let Some(storage) = cc.storage {
+            eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default()
+        } else {
+            Default::default()
+        };
+
+        let visuals = Visuals::dark();
+        cc.egui_ctx.set_visuals(visuals);
+
         // TODO (2023-02-03): There seems to be an issue, that when pixels_per_point is
         //    set to 1.0 (the default), the ui is instead shown at 2x the scale it should be.
         cc.egui_ctx.set_pixels_per_point(0.9999);
 
         let mut library = Library::new();
-        library.insert_from_directory(Utf8Path::new("example_audio"));
+        if config.library_directory != "" {
+            library.insert_from_directory(&config.library_directory);
+        }
 
         MusicsApp {
+            config,
+            config_view: ConfigView::new(),
             player: Player::new(),
             library,
             playlist: Playlist::new(),
@@ -282,6 +301,16 @@ impl App for MusicsApp {
             self.play_next_song();
         }
 
+        self.config_view.show(ctx, &mut self.config);
+
+        egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                if ui.button("Config").clicked() {
+                    self.config_view.open_window();
+                }
+            });
+        });
+
         egui::TopBottomPanel::bottom("controls").show(ctx, |ui| {
             self.show_play_controls(ui);
         });
@@ -300,6 +329,10 @@ impl App for MusicsApp {
             // And we would not realize that a song has finished playing.
             ctx.request_repaint_after(Duration::from_secs(1));
         }
+    }
+
+    fn save(&mut self, storage: &mut dyn Storage) {
+        eframe::set_value(storage, eframe::APP_KEY, &self.config);
     }
 }
 
