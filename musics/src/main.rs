@@ -7,16 +7,28 @@ use crate::config::{Config, ConfigView};
 use crate::library::Library;
 use crate::library_search_view::{LibrarySearchView, LibraryViewCommand};
 use crate::playlist::Playlist;
-use camino::Utf8Path;
 use eframe::egui::{
     Color32, Context, CursorIcon, Id, ProgressBar, RichText, Sense, Ui, Visuals, Widget,
 };
-use eframe::{egui, App, Frame, Storage};
+use eframe::{egui, App, Frame, IconData, Storage};
 use sound::Player;
 use std::time::Duration;
 
 fn main() {
-    let native_options = eframe::NativeOptions::default();
+    // TODO (2023-02-06): Package the icon with the executable?
+    let icon = image::open("icon.png")
+        .expect("Failed to open icon path")
+        .to_rgba8();
+    let (icon_width, icon_height) = icon.dimensions();
+
+    let native_options = eframe::NativeOptions {
+        icon_data: Some(IconData {
+            rgba: icon.into_raw(),
+            width: icon_width,
+            height: icon_height,
+        }),
+        ..Default::default()
+    };
     eframe::run_native(
         "Musics",
         native_options,
