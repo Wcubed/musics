@@ -40,6 +40,10 @@ impl Library {
         self.0.iter()
     }
 
+    pub fn song_count(&self) -> usize {
+        self.0.len()
+    }
+
     pub fn get_song(&self, id: SongId) -> Option<&Song> {
         self.0.get(id)
     }

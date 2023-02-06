@@ -210,6 +210,7 @@ impl MusicsApp {
                                 }
 
                                 if egui::Label::new(title_text)
+                                    .wrap(false)
                                     .sense(Sense::click())
                                     .ui(ui)
                                     .clicked()
@@ -243,6 +244,36 @@ impl MusicsApp {
             }
         }
     }
+
+    fn show_library(&mut self, ui: &mut Ui) {
+        let text_style = egui::TextStyle::Body;
+        let row_height = ui.text_style_height(&text_style);
+
+        egui::ScrollArea::both()
+            .auto_shrink([false, false])
+            .show_rows(
+                ui,
+                row_height,
+                self.library.song_count(),
+                |ui, row_range| {
+                    for (id, song) in self
+                        .library
+                        .songs()
+                        .skip(row_range.start)
+                        .take(row_range.len())
+                    {
+                        let song_response = egui::Label::new(&song.title)
+                            .wrap(false)
+                            .sense(Sense::click())
+                            .ui(ui);
+
+                        if song_response.clicked() {
+                            self.playlist.append_song(id);
+                        }
+                    }
+                },
+            );
+    }
 }
 
 impl App for MusicsApp {
@@ -256,11 +287,7 @@ impl App for MusicsApp {
         });
 
         egui::SidePanel::right("library").show(ctx, |ui| {
-            for (id, song) in self.library.songs() {
-                if ui.button(&song.title).clicked() {
-                    self.playlist.append_song(id);
-                }
-            }
+            self.show_library(ui);
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
