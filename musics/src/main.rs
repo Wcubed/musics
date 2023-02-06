@@ -267,6 +267,15 @@ impl MusicsApp {
             }
         }
     }
+
+    fn handle_library_view_command(&mut self, command: LibraryViewCommand) {
+        match command {
+            LibraryViewCommand::None => {}
+            LibraryViewCommand::AddSongToPlaylist(id) => {
+                self.playlist.append_song(id);
+            }
+        }
+    }
 }
 
 impl App for MusicsApp {
@@ -285,7 +294,8 @@ impl App for MusicsApp {
 
                 ui.separator();
 
-                self.library_search_view.show_search_box(ui, &self.library);
+                let command = self.library_search_view.show_search_box(ui, &self.library);
+                self.handle_library_view_command(command);
             });
         });
 
@@ -298,13 +308,7 @@ impl App for MusicsApp {
                 let command = self
                     .library_search_view
                     .show_search_results(ui, &self.library);
-
-                match command {
-                    LibraryViewCommand::None => {}
-                    LibraryViewCommand::AddSongToPlaylist(id) => {
-                        self.playlist.append_song(id);
-                    }
-                }
+                self.handle_library_view_command(command);
             });
         }
 
