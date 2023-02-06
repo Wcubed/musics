@@ -4,7 +4,7 @@ mod library_search_view;
 mod playlist;
 
 use crate::config::{Config, ConfigView};
-use crate::library::Library;
+use crate::library::{Library, SongId};
 use crate::library_search_view::{LibrarySearchView, LibraryViewCommand};
 use crate::playlist::Playlist;
 use eframe::egui::{
@@ -313,6 +313,16 @@ impl App for MusicsApp {
                 if ui.button("Config").clicked() {
                     self.config_view.open_window();
                 }
+
+                let add_full_library_response = ui.button("+ Full library");
+                if add_full_library_response.clicked() {
+                    // TODO (2023-02-06): Create an infinite, self-filling random playlist instead.
+                    let mut songs: Vec<SongId> = self.library.songs().map(|(id, _)| id).collect();
+                    fastrand::shuffle(&mut songs);
+                    self.playlist.append_songs(&songs);
+                }
+                add_full_library_response
+                    .on_hover_text("Adds the full library randomized to the playlist.");
 
                 ui.separator();
 

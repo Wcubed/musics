@@ -26,6 +26,10 @@ impl Playlist {
         self.songs.push(song)
     }
 
+    pub fn append_songs(&mut self, songs: &[SongId]) {
+        self.songs.extend_from_slice(songs);
+    }
+
     pub fn select_next_song(&mut self, wrap: bool) -> Option<SongId> {
         // TODO (2023-02-03): Refactor this set of if statements.
         self.current_song_index = if self.songs.is_empty() {
