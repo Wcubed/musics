@@ -104,20 +104,35 @@ impl Playlist {
         }
     }
 
-    pub fn remove_song_by_index(&mut self, index: usize) {
+    /// Returns true if the song being removed is the currently selected song.
+    /// False otherwise.
+    pub fn remove_song_by_index(&mut self, index: usize) -> bool {
         if index >= self.songs.len() {
-            return;
+            return false;
         }
 
         self.songs.remove(index);
 
+        let mut song_removed_is_current_song = false;
+
         if let Some(current_song) = self.current_song_index {
             if current_song == index {
-                self.current_song_index = None;
+                song_removed_is_current_song = true;
+
+                // `>= song_count` instead of `>= song_count - 1` because the song has already
+                // been removed, so the list of songs is 1 shorter.
+                if index >= self.song_count() {
+                    // Keeping the index on the current value will auto-select the next song
+                    // in the list. But if there is no next song, we should make sure to communicate
+                    // this as such.
+                    self.current_song_index = None;
+                }
             } else if current_song > index {
                 self.current_song_index = Some(current_song - 1);
             }
         }
+
+        return song_removed_is_current_song;
     }
 
     pub fn current_song_index(&self) -> Option<usize> {

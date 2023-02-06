@@ -260,10 +260,20 @@ impl MusicsApp {
         }
 
         if let Some(remove_index) = remove_song {
-            self.playlist.remove_song_by_index(remove_index);
-            if self.playlist.current_song_index().is_none() {
-                // The user removed the currently playing song.
-                self.player.stop();
+            let removed_current_song = self.playlist.remove_song_by_index(remove_index);
+
+            if removed_current_song {
+                if let Some(index) = self.playlist.current_song_index() {
+                    let was_playing = self.player.is_playing();
+
+                    self.play_song_by_playlists_index(index);
+
+                    if !was_playing {
+                        self.player.pause();
+                    }
+                } else {
+                    self.player.stop();
+                }
             }
         }
     }
